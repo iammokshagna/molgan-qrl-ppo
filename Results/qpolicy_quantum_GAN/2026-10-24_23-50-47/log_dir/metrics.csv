@@ -1,0 +1,1 @@
+epoch,time_sec,loss_d,loss_pi,loss_v,r_avg,valid_rate,stable_rate,unique_rate,novel_rate,qed,logp,sas,np,dc

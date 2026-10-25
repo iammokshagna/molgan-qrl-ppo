@@ -1,0 +1,2 @@
+epoch,time_sec,loss_d,loss_pi,loss_v,r_avg,valid_rate,stable_rate,unique_rate,novel_rate,qed,logp,sas,np,dc
+1,1974.44,1.3604,-0.0156,0.0909,-0.1346,0.9938,0.795,1.0,1.0,0.4217,0.2556,6.4125,0.5858,0.6424

@@ -1,0 +1,28 @@
+# Large preprocessed graph tensors exceeding GitHub 100MB limit
+# Rebuild using: python data/build_cns_9_35_dataset.py
+*.sparsedataset
+data/*.sparsedataset
+
+# Python cache & build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environments & IDEs
+.env/
+venv/
+env/
+.vscode/
+.idea/
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# Log files
+*.log
+train.log
