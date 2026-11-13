@@ -1,0 +1,1 @@
+epoch,loss_actor,loss_critic,loss_disc,mean_reward,mean_val,mean_bace1,mean_bbb,mean_sas,validity,uniqueness,novelty,diversity,stability,time_sec

@@ -1,0 +1,637 @@
+import os
+import math
+import gzip
+import pickle
+import warnings
+warnings.filterwarnings('ignore')
+import numpy as np
+import torch
+import torch.nn as nn
+from rdkit import Chem, DataStructs, RDLogger
+from rdkit.Chem import QED, Crippen, Descriptors, rdMolDescriptors
+from rdkit.Chem.Scaffolds import MurckoScaffold
+
+# Suppress noisy RDKit C++ warnings/deprecation logs
+RDLogger.DisableLog('rdApp.*')
+
+# Import Phase 3 SOTA BACE-1 & BBB Predictor for direct hierarchical RL reward
+try:
+    from phase3_testing_models.bace1_dual.predict import get_classifier_and_scaler
+    from phase3_testing_models.bace1_dual.features import extract_combined_features
+except Exception:
+    get_classifier_and_scaler = None
+    extract_combined_features = None
+
+# Allowed atom types for CNS 9-element vocabulary:
+# Index 0 = PAD (no atom), indices 1-9 = real heavy atoms
+ATOM_TYPES = ['PAD', 'C', 'N', 'O', 'F', 'I', 'P', 'S', 'Cl', 'Br']
+ATOMIC_NUMBERS = [0, 6, 7, 8, 9, 53, 15, 16, 17, 35]
+
+# 4 Bond types (Aromatic bond removed - single, double, triple, and no bond only):
+BOND_TYPES = [
+    None,                           # Index 0: No bond
+    Chem.rdchem.BondType.SINGLE,    # Index 1: Single bond
+    Chem.rdchem.BondType.DOUBLE,    # Index 2: Double bond
+    Chem.rdchem.BondType.TRIPLE     # Index 3: Triple bond
+]
+
+# Load SA and NP scoring models if present
+def _load_pickle_gz(filepath):
+    if os.path.exists(filepath):
+        try:
+            with gzip.open(filepath, 'rb') as f:
+                return pickle.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load {filepath}: {e}")
+    return None
+
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_sa_raw = _load_pickle_gz(os.path.join(_BASE_DIR, 'data', 'SA_score.pkl.gz'))
+SA_MODEL = {i[j]: float(i[0]) for i in _sa_raw for j in range(1, len(i))} if _sa_raw else {}
+
+_np_raw = _load_pickle_gz(os.path.join(_BASE_DIR, 'data', 'NP_score.pkl.gz'))
+NP_MODEL = _np_raw if _np_raw else {}
+
+# SMARTS patterns for physically unstable, explosive, or strained structural motifs:
+UNSTABLE_SMARTS_PATTERNS = [
+    Chem.MolFromSmarts('[#7]~[#7]~[#7]'),        # Contiguous 3+ nitrogens (triazenes, azides, etc.)
+    Chem.MolFromSmarts('[#8]~[#8]'),            # Peroxides & poly-oxides (O-O)
+    Chem.MolFromSmarts('[#7,#8]1~[#7,#8]~*1'),  # Strained 3-membered rings with multiple heteroatoms
+    Chem.MolFromSmarts('[#9]~[#7,#8,#9]'),      # Fluorine bonded to heteroatom (N-F, O-F, F-F)
+]
+
+# REINVENT Structural Alert & Strain Filters:
+BREDT_VIOLATION = Chem.MolFromSmarts('[$([#6;!R0;!R1])]=,#[#6]')
+STRAINED_RINGS = [
+    Chem.MolFromSmarts('C1=CC1'),  # Cyclopropene
+    Chem.MolFromSmarts('C1=CO1'),  # Oxirene
+    Chem.MolFromSmarts('C1=CN1'),  # 2H-Azirine
+]
+
+def check_bond_strain_and_realism(mol):
+    """
+    Comprehensive physical bond strain, ring strain, and chemical realism analyzer.
+    Checks:
+      1. Heteroatom 3-membered rings (oxiranes, aziridines, thiiranes, etc.) -> Strict Ban
+      2. Multiple 3-membered rings or fused triangles -> Strict Ban
+      3. Fused small rings (3-3, 3-4, 4-4 rings sharing >= 2 atoms) -> Strict Ban
+      4. Complex polycyclic cages (Bridgehead atoms > 2) -> Heavy Penalty
+      5. Anti-Bredt's rule violations -> Penalty
+      6. Exotic non-CNS elements: Phosphorus (P, 15) and Iodine (I, 53) -> Strict Ban
+      7. Excessive or mixed halogens (e.g. F + Cl + Br) -> Penalty
+      8. Low Carbon percentage (< 65% Carbon) -> Penalty
+    Returns:
+      is_clean (bool), penalty_score (float), issues (list of str)
+    """
+    if mol is None:
+        return False, 0.5, ["Invalid Molecule"]
+
+    penalty = 0.0
+    issues = []
+
+    # 1. Ring Strain Analysis
+    ri = mol.GetRingInfo()
+    atom_rings = ri.AtomRings()
+    r3 = [r for r in atom_rings if len(r) == 3]
+    r4 = [r for r in atom_rings if len(r) == 4]
+    r_macro = [r for r in atom_rings if len(r) > 7]
+
+    # Check for macrocycles (rings > 7 atoms)
+    if r_macro:
+        penalty += 0.45 * len(r_macro)
+        issues.append(f"Macrocycle detected: ring size(s) {[len(r) for r in r_macro]}")
+
+    # Check 3-membered and 4-membered rings
+    if r3:
+        penalty += 0.40 * len(r3)
+        issues.append(f"Strained 3-ring ({len(r3)})")
+    if r4:
+        penalty += 0.35 * len(r4)
+        issues.append(f"Strained 4-ring ({len(r4)})")
+
+    # Fused small rings (e.g. bicyclo[1.1.0] cages)
+    small_rings = r3 + r4
+    for i in range(len(small_rings)):
+        for j in range(i + 1, len(small_rings)):
+            shared = set(small_rings[i]).intersection(set(small_rings[j]))
+            if len(shared) >= 2:
+                penalty += 0.35
+                issues.append(f"Fused small rings sharing {len(shared)} atoms")
+                break
+        if penalty >= 0.7:
+            break
+
+    # Multi-bridged cage structures
+    n_bridgeheads = rdMolDescriptors.CalcNumBridgeheadAtoms(mol)
+    if n_bridgeheads > 2:
+        penalty += 0.35
+        issues.append(f"Strained cage: {n_bridgeheads} bridgeheads")
+
+    # Bredt's rule violations (only possible in bridged ring systems with bridgeheads)
+    if n_bridgeheads > 0 and BREDT_VIOLATION is not None and mol.HasSubstructMatch(BREDT_VIOLATION):
+        penalty += 0.30
+        issues.append("Bredt's rule violation (bridgehead double bond)")
+
+    # 2. Elemental Composition & Realism
+    heavy = mol.GetNumHeavyAtoms()
+    c_count = sum(1 for a in mol.GetAtoms() if a.GetAtomicNum() == 6)
+    c_frac = c_count / max(heavy, 1)
+
+    # Real CNS drug molecules are >= 65% Carbon
+    if c_frac < 0.60:
+        penalty += 0.35
+        issues.append(f"Low Carbon fraction: {c_frac*100:.1f}%")
+
+    # Exotic elements in small-molecule CNS drugs (P, I)
+    banned_elements = {15: 'Phosphorus (P)', 53: 'Iodine (I)'}
+    for a in mol.GetAtoms():
+        z = a.GetAtomicNum()
+        if z in banned_elements:
+            penalty += 0.50
+            issues.append(f"Exotic unnatural atom: {banned_elements[z]}")
+            break
+
+    # Halogen cocktail check
+    halogens = [a.GetAtomicNum() for a in mol.GetAtoms() if a.GetAtomicNum() in [9, 17, 35]]
+    unique_halogens = set(halogens)
+    if len(unique_halogens) > 1 and not (unique_halogens == {9, 17} and halogens.count(17) <= 1):
+        penalty += 0.30
+        issues.append("Mixed halogen cocktail")
+
+    # Contiguous nitrogens / peroxides
+    for pat in UNSTABLE_SMARTS_PATTERNS:
+        if pat is not None and mol.HasSubstructMatch(pat):
+            penalty += 0.30
+            issues.append("Chemically unstable motif")
+            break
+
+    is_clean = (penalty == 0.0)
+    return is_clean, min(penalty, 1.0), issues
+
+def check_reinvent_structural_alerts(mol):
+    is_clean, _, _ = check_bond_strain_and_realism(mol)
+    return not is_clean
+
+
+class ScaffoldMemoryFilter:
+    """
+    REINVENT Scaffold Diversity Memory.
+    Tracks Bemis-Murcko scaffolds in memory buckets to mathematically prevent mode collapse.
+    When a scaffold exceeds bucket_size (e.g. 25 occurrences), the reward is zeroed out.
+    """
+    def __init__(self, bucket_size=25, penalty=0.0):
+        self.bucket_size = bucket_size
+        self.penalty = penalty
+        self.memory = {}
+
+    def score_and_update(self, mol):
+        if mol is None:
+            return 1.0
+        try:
+            scaffold = MurckoScaffold.MurckoScaffoldSmiles(mol=mol)
+            if not scaffold:
+                scaffold = Chem.MolToSmiles(mol)
+            count = self.memory.get(scaffold, 0)
+            if count >= self.bucket_size:
+                return self.penalty
+            self.memory[scaffold] = count + 1
+            return 1.0
+        except Exception:
+            return 1.0
+
+    def reset(self):
+        self.memory.clear()
+
+
+def matrices_to_mols(node_indices, edge_indices):
+    """
+    Converts node indices and edge indices into a list of RDKit Mol objects.
+    """
+    if isinstance(node_indices, torch.Tensor):
+        node_indices = node_indices.detach().cpu().numpy()
+    if isinstance(edge_indices, torch.Tensor):
+        edge_indices = edge_indices.detach().cpu().numpy()
+
+    batch_size, num_nodes = node_indices.shape
+    mols = []
+
+    for b in range(batch_size):
+        rw_mol = Chem.RWMol()
+        node_to_atom_idx = {}
+        valid_nodes = 0
+
+        # 1. Add atoms
+        for i in range(num_nodes):
+            atom_type = int(node_indices[b, i])
+            if 0 < atom_type < len(ATOMIC_NUMBERS):  # Skip PAD (0)
+                atomic_num = ATOMIC_NUMBERS[atom_type]
+                atom = Chem.Atom(atomic_num)
+                atom_idx = rw_mol.AddAtom(atom)
+                node_to_atom_idx[i] = atom_idx
+                valid_nodes += 1
+
+        if valid_nodes == 0:
+            mols.append(None)
+            continue
+
+        # 2. Add bonds
+        for i in range(num_nodes):
+            if i not in node_to_atom_idx:
+                continue
+            for j in range(i + 1, num_nodes):
+                if j not in node_to_atom_idx:
+                    continue
+                bond_type_idx = int(edge_indices[b, i, j])
+                if 0 < bond_type_idx < len(BOND_TYPES):
+                    rw_mol.AddBond(node_to_atom_idx[i], node_to_atom_idx[j], BOND_TYPES[bond_type_idx])
+
+        # 3. Sanitize and validate
+        mol = rw_mol.GetMol()
+        try:
+            Chem.SanitizeMol(mol)
+            # Ensure connected molecule of sufficient size (>= 3 heavy atoms)
+            frags = Chem.GetMolFrags(mol, asMols=True)
+            if len(frags) > 1:
+                largest = max(frags, key=lambda m: m.GetNumAtoms())
+                if largest.GetNumHeavyAtoms() < 3:
+                    mols.append(None)
+                    continue
+                mol = largest
+
+            if Chem.MolToSmiles(mol) == '':
+                mols.append(None)
+            else:
+                mols.append(mol)
+        except Exception:
+            mols.append(None)
+
+    return mols
+
+
+def calculate_qed(mol):
+    if mol is None:
+        return 0.0
+    try:
+        return float(QED.qed(mol))
+    except Exception:
+        return 0.0
+
+
+def calculate_logp(mol, norm=True):
+    if mol is None:
+        return 0.0
+    try:
+        logp = Crippen.MolLogP(mol)
+        if norm:
+            norm_logp = (logp + 2.12178879609) / (6.0429063424 + 2.12178879609)
+            return float(np.clip(norm_logp, 0.0, 1.0))
+        return float(logp)
+    except Exception:
+        return 0.0
+
+
+def calculate_sas(mol, norm=True):
+    if mol is None or not SA_MODEL:
+        return 0.0
+    try:
+        fp = Chem.rdMolDescriptors.GetMorganFingerprint(mol, 2)
+        fps = fp.GetNonzeroElements()
+        score1 = 0.0
+        nf = 0
+        for bitId, v in fps.items():
+            nf += v
+            score1 += SA_MODEL.get(bitId, -4.0) * v
+        score1 /= max(nf, 1)
+
+        nAtoms = mol.GetNumAtoms()
+        nChiralCenters = len(Chem.FindMolChiralCenters(mol, includeUnassigned=True))
+        ri = mol.GetRingInfo()
+        nSpiro = Chem.rdMolDescriptors.CalcNumSpiroAtoms(mol)
+        nBridgeheads = Chem.rdMolDescriptors.CalcNumBridgeheadAtoms(mol)
+        nMacrocycles = sum(1 for x in ri.AtomRings() if len(x) > 8)
+
+        sizePenalty = nAtoms ** 1.005 - nAtoms
+        stereoPenalty = math.log10(nChiralCenters + 1)
+        spiroPenalty = math.log10(nSpiro + 1)
+        bridgePenalty = math.log10(nBridgeheads + 1)
+        macrocyclePenalty = math.log10(2) if nMacrocycles > 0 else 0.0
+
+        score2 = 0.0 - sizePenalty - stereoPenalty - spiroPenalty - bridgePenalty - macrocyclePenalty
+        score3 = math.log(float(nAtoms) / len(fps)) * 0.5 if nAtoms > len(fps) else 0.0
+
+        sascore = score1 + score2 + score3
+        sascore = 11.0 - (sascore - (-4.0) + 1.0) / (2.5 - (-4.0)) * 9.0
+        if sascore > 8.0:
+            sascore = 8.0 + math.log(sascore + 1.0 - 9.0)
+        sascore = np.clip(sascore, 1.0, 10.0)
+
+        if norm:
+            norm_sas = (5.0 - sascore) / (5.0 - 1.5)
+            return float(np.clip(norm_sas, 0.0, 1.0))
+        return float(sascore)
+    except Exception:
+        return 0.0
+
+
+def calculate_np(mol, norm=True):
+    if mol is None or not NP_MODEL:
+        return 0.0
+    try:
+        fp = Chem.rdMolDescriptors.GetMorganFingerprint(mol, 2)
+        bits = fp.GetNonzeroElements()
+        score = sum(NP_MODEL.get(bit, 0.0) for bit in bits) / float(max(mol.GetNumAtoms(), 1))
+
+        if score > 4.0:
+            score = 4.0 + math.log10(score - 4.0 + 1.0)
+        elif score < -4.0:
+            score = -4.0 - math.log10(-4.0 - score + 1.0)
+
+        if norm:
+            norm_np = (score - (-3.0)) / (1.0 - (-3.0))
+            return float(np.clip(norm_np, 0.0, 1.0))
+        return float(score)
+    except Exception:
+        return 0.0
+
+
+def calculate_dc(mol, norm_logp=None, sas_norm=None, is_novel=1.0):
+    if mol is None:
+        return 0.0
+    try:
+        if norm_logp is None:
+            norm_logp = calculate_logp(mol, norm=True)
+        if sas_norm is None:
+            sas_norm = calculate_sas(mol, norm=True)
+
+        decay = 0.025
+        if norm_logp <= 0.210:
+            bump = math.exp(- (norm_logp - 0.210) ** 2 / decay)
+        elif norm_logp >= 0.945:
+            bump = math.exp(- (norm_logp - 0.945) ** 2 / decay)
+        else:
+            bump = 1.0
+
+        novelty_term = is_novel + (1.0 - is_novel) * 0.3
+        dc = (bump + sas_norm + novelty_term) / 3.0
+        return float(np.clip(dc, 0.0, 1.0))
+    except Exception:
+        return 0.0
+
+
+def calculate_batch_tanimoto_diversity(mols):
+    """
+    Computes pairwise Morgan fingerprint (ECFP4) Tanimoto diversity multipliers for a batch.
+    Penalizes duplicate or near-identical scaffolds: max(0.0, 1.0 - max_sim^2).
+    """
+    B = len(mols)
+    fps = []
+    for mol in mols:
+        if mol is not None:
+            try:
+                fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 2, nBits=1024)
+                fps.append(fp)
+            except Exception:
+                fps.append(None)
+        else:
+            fps.append(None)
+
+    div_factors = []
+    for i in range(B):
+        if fps[i] is None:
+            div_factors.append(1.0)
+            continue
+
+        max_sim = 0.0
+        for j in range(B):
+            if i != j and fps[j] is not None:
+                sim = DataStructs.TanimotoSimilarity(fps[i], fps[j])
+                if sim > max_sim:
+                    max_sim = sim
+
+        factor = max(0.0, 1.0 - (max_sim ** 2))
+        div_factors.append(factor)
+
+    return div_factors
+
+
+class CompositeRewardCalculator(nn.Module):
+    """
+    Composite Reward Function with Explicit Hierarchical Priorities:
+      1. BACE-1 Inhibition Probability (Highest Priority: weight 0.45 + active bonus)
+      2. Blood-Brain Barrier (BBB) Permeability (Second Priority: weight 0.30 + penetrant bonus)
+      3. Synthetic Accessibility Score (SAS) (Third Priority: weight 0.15 + low-strain bonus)
+      4. Structural Realism from Discriminator D(G) (weight 0.10)
+      5. Strict Penalization of Bond Strain (heteroatom 3-rings, polycyclic cages, fused small rings)
+      6. Strict Penalization of Exotic Non-CNS Elements (P, I, mixed halogen cocktails)
+      7. Carbon Backbone Enforcement (>= 65% Carbon)
+      8. REINVENT Scaffold Memory Filter & In-Batch Tanimoto Diversity
+    """
+    def __init__(self, quantum_evaluator=None, alpha=0.45, beta=0.10, gamma=0.30,
+                 prop_metric='bace1', scaffold_bucket_size=25, use_filter=True,
+                 use_scaffold_memory=True, use_tanimoto=True):
+        super(CompositeRewardCalculator, self).__init__()
+        self.quantum_evaluator = quantum_evaluator
+        self.alpha = alpha      # BACE-1 priority weight
+        self.beta = beta        # Discriminator realness weight
+        self.gamma = gamma      # BBB priority weight
+        self.sas_weight = 0.15  # SAS priority weight
+        self.prop_metric = prop_metric.lower()
+        self.use_filter = use_filter
+        self.use_scaffold_memory = use_scaffold_memory
+        self.use_tanimoto = use_tanimoto
+
+        # Load SOTA BACE-1 & BBB predictor
+        self.bace1_model = None
+        self.bace1_scaler = None
+        if get_classifier_and_scaler is not None:
+            try:
+                self.bace1_model, self.bace1_scaler, _ = get_classifier_and_scaler()
+            except Exception as e:
+                print(f"Notice: BACE-1 classifier loading in reward: {e}")
+
+        # REINVENT Scaffold Memory Filter to eliminate mode collapse
+        self.scaffold_filter = ScaffoldMemoryFilter(bucket_size=scaffold_bucket_size, penalty=0.0)
+
+    def evaluate_bace1_bbb_sas(self, mols, device):
+        batch_size = len(mols)
+        p_bace1 = np.zeros(batch_size, dtype=np.float32)
+        p_bbb = np.zeros(batch_size, dtype=np.float32)
+        r_sas = np.zeros(batch_size, dtype=np.float32)
+        raw_sas = [10.0] * batch_size
+
+        valid_pairs = [(i, m) for i, m in enumerate(mols) if m is not None]
+        if not valid_pairs:
+            return (
+                torch.zeros((batch_size, 1), device=device),
+                torch.zeros((batch_size, 1), device=device),
+                torch.zeros((batch_size, 1), device=device),
+                raw_sas
+            )
+
+        indices = [p[0] for p in valid_pairs]
+        valid_mols = [p[1] for p in valid_pairs]
+
+        # 1. BACE-1 & BBB Predictions
+        if self.bace1_model is not None and extract_combined_features is not None:
+            try:
+                feats_list = [extract_combined_features(m, scaler=self.bace1_scaler) for m in valid_mols]
+                feats_arr = np.array(feats_list, dtype=np.float32)
+                feats_t = torch.from_numpy(feats_arr).to(device)
+                with torch.no_grad():
+                    prob_bbb_t, prob_bace1_t = self.bace1_model.predict_proba(feats_t)
+                    p_bbb_arr = prob_bbb_t.cpu().numpy()
+                    p_bace1_arr = prob_bace1_t.cpu().numpy()
+            except Exception:
+                p_bbb_arr = np.zeros(len(valid_mols), dtype=np.float32)
+                p_bace1_arr = np.zeros(len(valid_mols), dtype=np.float32)
+        else:
+            p_bbb_arr = np.zeros(len(valid_mols), dtype=np.float32)
+            p_bace1_arr = np.zeros(len(valid_mols), dtype=np.float32)
+
+        # 2. SAS Evaluation
+        for k, orig_idx in enumerate(indices):
+            m = valid_mols[k]
+            p_bace1[orig_idx] = float(p_bace1_arr[k])
+            p_bbb[orig_idx] = float(p_bbb_arr[k])
+
+            s_val = calculate_sas(m, norm=False)
+            raw_sas[orig_idx] = s_val
+            # High reward for low SAS (easy synthesis, low strain): SAS 1.5-3.5 -> 1.0 - 0.5
+            norm_s = max(0.0, min(1.0, (5.5 - s_val) / 4.0))
+            r_sas[orig_idx] = norm_s
+
+        return (
+            torch.from_numpy(p_bace1).unsqueeze(-1).to(device),
+            torch.from_numpy(p_bbb).unsqueeze(-1).to(device),
+            torch.from_numpy(r_sas).unsqueeze(-1).to(device),
+            raw_sas
+        )
+
+    def forward(self, mols, discriminator_scores=None):
+        device = next(self.parameters()).device if list(self.parameters()) else torch.device('cpu')
+        batch_size = len(mols)
+
+        # 1. Quantum Reward R_Q in [0, 1]
+        if self.quantum_evaluator is not None:
+            r_quantum = self.quantum_evaluator.evaluate_mols(mols).to(device)
+        else:
+            r_quantum = torch.zeros(batch_size, 1, device=device)
+
+        # 2. Discriminator Realness in [0.0, 1.0]
+        if discriminator_scores is not None:
+            if discriminator_scores.dim() == 1:
+                discriminator_scores = discriminator_scores.unsqueeze(-1)
+            prob_real = torch.sigmoid(discriminator_scores).to(device)
+        else:
+            prob_real = torch.zeros(batch_size, 1, device=device)
+
+        # 3. Direct BACE-1, BBB, and SAS Evaluation (User Priorities)
+        p_bace1_t, p_bbb_t, r_sas_t, raw_sas_list = self.evaluate_bace1_bbb_sas(mols, device)
+
+        # 4. In-batch Tanimoto diversity multipliers
+        if self.use_tanimoto:
+            tanimoto_factors = calculate_batch_tanimoto_diversity(mols)
+        else:
+            tanimoto_factors = [1.0] * batch_size
+
+        # 5. Composite Reward with Hierarchical Priorities & Strain Penalties
+        rewards = []
+        stable_flags = []
+        strain_penalties = []
+
+        for i, mol in enumerate(mols):
+            if mol is None:
+                rewards.append(-0.5)  # Invalid graph penalty
+                stable_flags.append(0.0)
+                strain_penalties.append(0.5)
+                continue
+
+            # Physical bond strain, ring strain, and chemical realism analysis
+            is_clean, strain_penalty, issues = check_bond_strain_and_realism(mol)
+            strain_penalties.append(strain_penalty)
+
+            # Check standard unstable motifs
+            has_unstable_motif = any(pat and mol.HasSubstructMatch(pat) for pat in UNSTABLE_SMARTS_PATTERNS)
+            if has_unstable_motif:
+                strain_penalty += 0.30
+
+            # Scaffold Memory Filter
+            scaffold_factor = 1.0
+            if self.use_scaffold_memory:
+                scaffold_factor = self.scaffold_filter.score_and_update(mol)
+                if scaffold_factor <= 0.0:
+                    rewards.append(-0.1)  # Penalize over-sampled scaffold to force exploration
+                    stable_flags.append(1.0)
+                    continue
+
+            # Target Metrics for this molecule
+            val_bace1 = p_bace1_t[i, 0].item()
+            val_bbb = p_bbb_t[i, 0].item()
+            val_sas_r = r_sas_t[i, 0].item()
+            val_d = prob_real[i, 0].item()
+            val_sas_raw = raw_sas_list[i]
+
+            # Carbon fraction factor (drugs are >= 65% Carbon)
+            n_heavy = mol.GetNumHeavyAtoms()
+            n_c = sum(1 for a in mol.GetAtoms() if a.GetAtomicNum() == 6)
+            c_frac = n_c / float(max(n_heavy, 1))
+            c_factor = min(1.0, c_frac / 0.65)
+
+            # Hierarchical Priority Reward Calculation:
+            # 1. BACE-1 (Highest Priority: weight 0.45)
+            # 2. BBB (Second Priority: weight 0.30)
+            # 3. SAS (Third Priority: weight 0.15)
+            # 4. Discriminator Realism (weight 0.10)
+            r_base = (
+                0.45 * val_bace1 +
+                0.30 * val_bbb +
+                0.15 * val_sas_r +
+                0.10 * val_d
+            )
+
+            # Medicinal Chemistry Target Bonuses
+            if val_bace1 >= 0.50:
+                r_base += 0.15  # Active BACE-1 inhibitor bonus (Priority 1)
+            if val_bbb >= 0.50:
+                r_base += 0.10  # Brain-permeable bonus (Priority 2)
+            if val_sas_raw <= 3.5:
+                r_base += 0.10  # Low-strain, easily synthesizable bonus (Priority 3)
+
+            # Ring topology bonus (Medicinal Cyclic Stability: 1-2 unstrained 5/6 rings preferred)
+            ri_mol = mol.GetRingInfo()
+            atom_rings = ri_mol.AtomRings()
+            num_rings = len(atom_rings)
+            if 1 <= num_rings <= 2 and all(len(r) in (5, 6) for r in atom_rings):
+                r_base += 0.15  # Stable 5/6-membered cyclic scaffold bonus
+            elif num_rings == 0:
+                r_base -= 0.10  # Acyclic penalty
+
+            # Subtract physical bond strain & unrealistic atom penalty
+            r_composite = (r_base - strain_penalty) * c_factor
+
+            # In-Batch Tanimoto Diversity Multiplier & Scaffold Factor
+            r_composite = r_composite * tanimoto_factors[i] * scaffold_factor
+
+            # Molecule is marked stable only if clean (no severe bond strain)
+            stable_flags.append(1.0 if is_clean else 0.0)
+
+            # Clamp final reward to [-1.0, 1.0]
+            rewards.append(max(-1.0, min(1.0, r_composite)))
+
+        total_reward = torch.tensor(rewards, dtype=torch.float32, device=device).view(-1, 1)
+        stable_tensor = torch.tensor(stable_flags, dtype=torch.float32, device=device).view(-1, 1)
+
+        breakdown = {
+            'r_quantum': r_quantum,
+            'r_disc': prob_real,
+            'p_bace1': p_bace1_t,
+            'p_bbb': p_bbb_t,
+            'r_sas': r_sas_t,
+            'raw_sas': raw_sas_list,
+            'strain_penalties': strain_penalties,
+            'stable_flags': stable_tensor,
+            'stability_rate': stable_tensor.mean().item(),
+            'validity_rate': sum(1 for m in mols if m is not None) / float(batch_size)
+        }
+
+        return total_reward, breakdown

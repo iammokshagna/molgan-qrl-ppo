@@ -1,0 +1,66 @@
+[2026-11-11 00:42:05] INFO: Initialized Jerbi VQP Policy run at: Results/full_scale_50epochs/2026-11-11_00-42-05
+[2026-11-11 00:42:05] INFO: Loading dataset from /home/cse-sdpl/new rotation policy molgan/data/cns_alzheimers_9_35.sparsedataset...
+[2026-11-11 00:42:05] INFO: Dataset loaded: 13,988 molecules (Max vertices: 35, Effective max_atoms: 35).
+[2026-11-11 00:42:05] INFO: Loading Phase 1 Graph VAE checkpoint from: /home/cse-sdpl/new rotation policy molgan/phase1_autoencoder/vae_model.pt
+[2026-11-11 00:42:05] INFO:   ✓ Phase 1 Graph VAE linked directly to Jerbi Quantum Policy Generator!
+[2026-11-11 00:42:05] INFO: Initializing 9-Qubit Variational Quantum Property Evaluator...
+[2026-11-11 00:42:05] INFO: Initializing Jerbi Actor (9-35 atoms, Atom: jerbi, Edge: mlp, Masking: True), Critic, Discriminator...
+[2026-11-11 00:42:05] INFO: Loading resume Actor checkpoint from: checkpoints/actor_epoch_5.pt
+[2026-11-11 00:42:05] INFO: Loading resume Critic checkpoint from: checkpoints/critic_epoch_5.pt
+[2026-11-11 00:42:05] INFO: Loading resume Discriminator checkpoint from: checkpoints/disc_epoch_5.pt
+[2026-11-11 00:42:05] INFO: Jerbi VQP Solver initialized on device: cuda
+[2026-11-11 00:42:05] INFO: Starting Jerbi VQP PPO Training for 50 epochs...
+[2026-11-11 00:44:13] INFO: Epoch [001/050] (127.9s) | Rew: +0.656 | BACE-1: 0.499 | BBB: 0.640 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.143 | L_C: 0.276 | L_D: 0.598
+[2026-11-11 00:44:13] INFO:   ★ New best model achieved at epoch 1 with Reward = +0.6555 (Saved to actor_best.pt)
+[2026-11-11 00:46:22] INFO: Epoch [002/050] (128.8s) | Rew: +0.547 | BACE-1: 0.439 | BBB: 0.487 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.089 | L_C: 0.092 | L_D: 0.563
+[2026-11-11 00:48:35] INFO: Epoch [003/050] (132.1s) | Rew: +0.673 | BACE-1: 0.439 | BBB: 0.758 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.068 | L_C: 0.062 | L_D: 0.559
+[2026-11-11 00:48:35] INFO:   ★ New best model achieved at epoch 3 with Reward = +0.6728 (Saved to actor_best.pt)
+[2026-11-11 00:50:55] INFO: Epoch [004/050] (140.7s) | Rew: +0.748 | BACE-1: 0.506 | BBB: 0.780 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.085 | L_C: 0.056 | L_D: 0.561
+[2026-11-11 00:50:56] INFO:   ★ New best model achieved at epoch 4 with Reward = +0.7482 (Saved to actor_best.pt)
+[2026-11-11 00:53:15] INFO: Epoch [005/050] (139.9s) | Rew: +0.624 | BACE-1: 0.431 | BBB: 0.589 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.119 | L_C: 0.070 | L_D: 0.571
+[2026-11-11 00:55:31] INFO: Epoch [006/050] (135.7s) | Rew: +0.510 | BACE-1: 0.345 | BBB: 0.484 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.104 | L_C: 0.052 | L_D: 0.539
+[2026-11-11 00:57:54] INFO: Epoch [007/050] (142.2s) | Rew: +0.561 | BACE-1: 0.374 | BBB: 0.548 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.074 | L_C: 0.035 | L_D: 0.550
+[2026-11-11 01:00:20] INFO: Epoch [008/050] (145.9s) | Rew: +0.711 | BACE-1: 0.638 | BBB: 0.655 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.048 | L_C: 0.133 | L_D: 0.582
+[2026-11-11 01:02:47] INFO: Epoch [009/050] (146.9s) | Rew: +0.662 | BACE-1: 0.452 | BBB: 0.728 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.078 | L_C: 0.035 | L_D: 0.540
+[2026-11-11 01:05:13] INFO: Epoch [010/050] (146.3s) | Rew: +0.610 | BACE-1: 0.422 | BBB: 0.602 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.041 | L_C: 0.072 | L_D: 0.573
+[2026-11-11 01:07:49] INFO: Epoch [011/050] (155.7s) | Rew: +0.624 | BACE-1: 0.445 | BBB: 0.547 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.084 | L_C: 0.064 | L_D: 0.546
+[2026-11-11 01:10:23] INFO: Epoch [012/050] (153.5s) | Rew: +0.675 | BACE-1: 0.460 | BBB: 0.704 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.052 | L_C: 0.040 | L_D: 0.559
+[2026-11-11 01:12:52] INFO: Epoch [013/050] (148.8s) | Rew: +0.608 | BACE-1: 0.394 | BBB: 0.697 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.076 | L_C: 0.042 | L_D: 0.553
+[2026-11-11 01:15:21] INFO: Epoch [014/050] (149.0s) | Rew: +0.624 | BACE-1: 0.439 | BBB: 0.612 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.098 | L_C: 0.062 | L_D: 0.577
+[2026-11-11 01:17:54] INFO: Epoch [015/050] (152.6s) | Rew: +0.588 | BACE-1: 0.388 | BBB: 0.630 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.084 | L_C: 0.041 | L_D: 0.554
+[2026-11-11 01:20:15] INFO: Epoch [016/050] (141.2s) | Rew: +0.540 | BACE-1: 0.321 | BBB: 0.719 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.074 | L_C: 0.052 | L_D: 0.551
+[2026-11-11 01:22:47] INFO: Epoch [017/050] (151.8s) | Rew: +0.656 | BACE-1: 0.432 | BBB: 0.669 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.098 | L_C: 0.067 | L_D: 0.516
+[2026-11-11 01:25:01] INFO: Epoch [018/050] (133.4s) | Rew: +0.702 | BACE-1: 0.438 | BBB: 0.861 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.074 | L_C: 0.057 | L_D: 0.552
+[2026-11-11 01:27:20] INFO: Epoch [019/050] (138.8s) | Rew: +0.723 | BACE-1: 0.450 | BBB: 0.803 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.075 | L_C: 0.043 | L_D: 0.534
+[2026-11-11 01:29:44] INFO: Epoch [020/050] (144.3s) | Rew: +0.614 | BACE-1: 0.422 | BBB: 0.566 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.089 | L_C: 0.054 | L_D: 0.551
+[2026-11-11 01:32:16] INFO: Epoch [021/050] (151.5s) | Rew: +0.649 | BACE-1: 0.541 | BBB: 0.576 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.080 | L_C: 0.063 | L_D: 0.537
+[2026-11-11 01:34:48] INFO: Epoch [022/050] (151.3s) | Rew: +0.552 | BACE-1: 0.422 | BBB: 0.460 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.080 | L_C: 0.063 | L_D: 0.537
+[2026-11-11 01:37:20] INFO: Epoch [023/050] (152.2s) | Rew: +0.644 | BACE-1: 0.520 | BBB: 0.593 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.074 | L_C: 0.034 | L_D: 0.532
+[2026-11-11 01:39:55] INFO: Epoch [024/050] (154.6s) | Rew: +0.643 | BACE-1: 0.528 | BBB: 0.647 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.081 | L_C: 0.046 | L_D: 0.527
+[2026-11-11 01:42:16] INFO: Epoch [025/050] (140.6s) | Rew: +0.688 | BACE-1: 0.443 | BBB: 0.675 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.087 | L_C: 0.042 | L_D: 0.480
+[2026-11-11 01:44:42] INFO: Epoch [026/050] (146.5s) | Rew: +0.578 | BACE-1: 0.450 | BBB: 0.468 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.059 | L_C: 0.069 | L_D: 0.504
+[2026-11-11 01:47:07] INFO: Epoch [027/050] (144.8s) | Rew: +0.678 | BACE-1: 0.569 | BBB: 0.501 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.043 | L_C: 0.045 | L_D: 0.506
+[2026-11-11 01:49:35] INFO: Epoch [028/050] (147.8s) | Rew: +0.682 | BACE-1: 0.502 | BBB: 0.585 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.086 | L_C: 0.041 | L_D: 0.522
+[2026-11-11 01:51:55] INFO: Epoch [029/050] (139.0s) | Rew: +0.570 | BACE-1: 0.365 | BBB: 0.566 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.092 | L_C: 0.047 | L_D: 0.529
+[2026-11-11 01:54:23] INFO: Epoch [030/050] (148.3s) | Rew: +0.645 | BACE-1: 0.470 | BBB: 0.548 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.053 | L_C: 0.053 | L_D: 0.502
+[2026-11-11 01:56:52] INFO: Epoch [031/050] (149.2s) | Rew: +0.650 | BACE-1: 0.482 | BBB: 0.573 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.101 | L_C: 0.066 | L_D: 0.518
+[2026-11-11 01:59:25] INFO: Epoch [032/050] (152.7s) | Rew: +0.665 | BACE-1: 0.523 | BBB: 0.588 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.092 | L_C: 0.061 | L_D: 0.529
+[2026-11-11 02:01:52] INFO: Epoch [033/050] (146.1s) | Rew: +0.657 | BACE-1: 0.432 | BBB: 0.687 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.081 | L_C: 0.078 | L_D: 0.493
+[2026-11-11 02:04:21] INFO: Epoch [034/050] (149.3s) | Rew: +0.525 | BACE-1: 0.441 | BBB: 0.479 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.070 | L_C: 0.104 | L_D: 0.544
+[2026-11-11 02:06:49] INFO: Epoch [035/050] (147.4s) | Rew: +0.721 | BACE-1: 0.458 | BBB: 0.754 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.067 | L_C: 0.026 | L_D: 0.497
+[2026-11-11 02:09:14] INFO: Epoch [036/050] (144.9s) | Rew: +0.726 | BACE-1: 0.507 | BBB: 0.706 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.068 | L_C: 0.032 | L_D: 0.522
+[2026-11-11 02:11:43] INFO: Epoch [037/050] (148.9s) | Rew: +0.605 | BACE-1: 0.417 | BBB: 0.601 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.073 | L_C: 0.044 | L_D: 0.539
+[2026-11-11 02:14:11] INFO: Epoch [038/050] (147.7s) | Rew: +0.553 | BACE-1: 0.392 | BBB: 0.613 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.045 | L_C: 0.090 | L_D: 0.441
+[2026-11-11 02:16:39] INFO: Epoch [039/050] (148.4s) | Rew: +0.600 | BACE-1: 0.440 | BBB: 0.615 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.106 | L_C: 0.081 | L_D: 0.472
+[2026-11-11 02:19:11] INFO: Epoch [040/050] (151.9s) | Rew: +0.691 | BACE-1: 0.494 | BBB: 0.633 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.055 | L_C: 0.054 | L_D: 0.499
+[2026-11-11 02:21:36] INFO: Epoch [041/050] (144.0s) | Rew: +0.618 | BACE-1: 0.465 | BBB: 0.537 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.103 | L_C: 0.046 | L_D: 0.520
+[2026-11-11 02:24:02] INFO: Epoch [042/050] (146.2s) | Rew: +0.582 | BACE-1: 0.399 | BBB: 0.520 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.056 | L_C: 0.070 | L_D: 0.497
+[2026-11-11 02:26:29] INFO: Epoch [043/050] (146.8s) | Rew: +0.628 | BACE-1: 0.464 | BBB: 0.577 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.057 | L_C: 0.028 | L_D: 0.523
+[2026-11-11 02:28:56] INFO: Epoch [044/050] (147.3s) | Rew: +0.607 | BACE-1: 0.472 | BBB: 0.543 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.067 | L_C: 0.052 | L_D: 0.496
+[2026-11-11 02:31:28] INFO: Epoch [045/050] (151.3s) | Rew: +0.619 | BACE-1: 0.449 | BBB: 0.616 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.094 | L_C: 0.040 | L_D: 0.446
+[2026-11-11 02:33:53] INFO: Epoch [046/050] (145.1s) | Rew: +0.559 | BACE-1: 0.418 | BBB: 0.592 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 87.5% | L_A: -0.082 | L_C: 0.047 | L_D: 0.452
+[2026-11-11 02:36:11] INFO: Epoch [047/050] (137.9s) | Rew: +0.681 | BACE-1: 0.441 | BBB: 0.844 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.084 | L_C: 0.047 | L_D: 0.488
+[2026-11-11 02:38:36] INFO: Epoch [048/050] (144.3s) | Rew: +0.568 | BACE-1: 0.338 | BBB: 0.668 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 93.8% | L_A: -0.064 | L_C: 0.091 | L_D: 0.430
+[2026-11-11 02:41:08] INFO: Epoch [049/050] (152.2s) | Rew: +0.625 | BACE-1: 0.441 | BBB: 0.564 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.057 | L_C: 0.038 | L_D: 0.485
+[2026-11-11 02:43:36] INFO: Epoch [050/050] (147.4s) | Rew: +0.579 | BACE-1: 0.424 | BBB: 0.528 | Val: 100.0% | Uniq: 100.0% | Nov: 100.0% | Stab: 100.0% | L_A: -0.066 | L_C: 0.041 | L_D: 0.470
+[2026-11-11 02:43:36] INFO: ✓ Jerbi VQP PPO Training Complete!

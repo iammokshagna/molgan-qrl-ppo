@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Large preprocessed graph tensors exceeding GitHub 100MB limit
+# Rebuild using: python data/build_cns_9_35_dataset.py
+*.sparsedataset
+data/*.sparsedataset
+
+# Allow small QM9 test datasets
+!data/qm9_with_negatives.sparsedataset
+!data/qm9_dynamic_balanced.sparsedataset
+
+# Temporary / scratch / IDE files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+scratch/

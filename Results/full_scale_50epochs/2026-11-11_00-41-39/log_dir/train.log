@@ -1,0 +1,9 @@
+[2026-11-11 00:41:39] INFO: Initialized Jerbi VQP Policy run at: Results/full_scale_50epochs/2026-11-11_00-41-39
+[2026-11-11 00:41:39] INFO: Loading dataset from /home/cse-sdpl/new rotation policy molgan/data/cns_alzheimers_9_35.sparsedataset...
+[2026-11-11 00:41:40] INFO: Dataset loaded: 13,988 molecules (Max vertices: 35, Effective max_atoms: 35).
+[2026-11-11 00:41:40] INFO: Loading Phase 1 Graph VAE checkpoint from: /home/cse-sdpl/new rotation policy molgan/phase1_autoencoder/vae_model.pt
+[2026-11-11 00:41:40] INFO:   ✓ Phase 1 Graph VAE linked directly to Jerbi Quantum Policy Generator!
+[2026-11-11 00:41:40] INFO: Initializing 9-Qubit Variational Quantum Property Evaluator...
+[2026-11-11 00:41:40] INFO: Initializing Jerbi Actor (9-35 atoms, Atom: jerbi, Edge: mlp, Masking: True), Critic, Discriminator...
+[2026-11-11 00:41:40] INFO: Loading resume Actor checkpoint from: checkpoints/actor_epoch_5.pt
+[2026-11-11 00:41:40] INFO: Loading resume Critic checkpoint from: checkpoints/critic_epoch_5.pt
