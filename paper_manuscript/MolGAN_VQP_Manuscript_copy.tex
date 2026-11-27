@@ -176,7 +176,8 @@ The complete closed-loop architecture of MolGAN-VQP is illustrated in Figure~\re
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.75\textwidth]{figures/framework_architecture.png}
+\includegraphics[width=0.68\textwidth]{figures/framework_architecture.png}
+\vspace{-0.15cm}
 \caption{End-to-end closed-loop architecture of the MolGAN-VQP framework: An active molecular subgraph is encoded by the Relational GCN Encoder and routed to the Dual Parameterized Quantum Circuit (PQC) policy. Action logits are filtered in real time by the 14-rule Chemical Valence Masking Engine before Softmax sampling to construct the generated molecule bond-by-bond. Completed molecules are evaluated by the Relational GCN Discriminator and the 4-Qubit Quantum Physicochemical Evaluator to calculate multi-objective rewards in the Composite Reward Engine. Concurrently, the RGCN Value Critic estimates state returns, supplying the Batch Advantage Engine to optimize the quantum policy and critic networks via Two-Pass Clipped PPO Optimization.}
 \label{fig:framework_architecture}
 \end{figure}
@@ -196,7 +197,16 @@ To provide the autoregressive agent with global topological guidance without rel
 \subsection{Phase 2: Dual Data Re-Uploading Quantum Policy Circuits}
 Phase 2 replaces dense matrix generation with an autoregressive Markov Decision Process (MDP) operating across heavy-atom placement steps $t \in [1, N_{\text{target}}]$. At each step, decisions factorize hierarchically into: (1) Atom Type Selection via the 9-qubit \texttt{JerbiAtomPolicy}, and (2) sequential Bond Order Selection to previously placed atoms via the 4-qubit \texttt{JerbiEdgePolicy}. Complete vector schematics of both circuits are depicted in Figure~\ref{fig:quantum_circuits}.
 
-\begin{figure}[!htbp]
+\subsubsection*{9-Qubit Atom Prediction Policy (\texttt{JerbiAtomPolicy})}
+At step $t$, \texttt{JerbiAtomPolicy} ($19,062$ parameters) assigns one qubit exclusively to each heavy element ($\mathrm{Q}_0$--$\mathrm{Q}_8$). Across $L=3$ variational blocks, classical state features $\mathbf{h}_G' \in \mathbb{R}^{64}$ are re-uploaded at every layer $l \in \{0, 1, 2\}$ via dedicated $\text{MLP}_l$ subnetworks ($64 \to 64 \to 9$) outputting $\boldsymbol{\alpha}^{(l)} = \pi \tanh(\mathrm{MLP}_l(\mathbf{h}_G')) \in [-\pi, \pi]^9$:
+\begin{equation}
+|\psi_{\text{atom}}(\mathbf{h}_G'; \boldsymbol{\theta})\rangle = \prod_{l=0}^{L-1} \left[ \left(\bigotimes_{i=0}^{8} \mathrm{Rot}(\theta_{l,i,0}, \theta_{l,i,1}, \theta_{l,i,2})\right) \left(\prod_{i=0}^{8} \mathrm{CNOT}_{(i, (i+1)\bmod 9)}\right) \left(\bigotimes_{i=0}^{8} R_Y(\alpha_i^{(l)})\right) \right] |0\rangle^{\otimes 9}.
+\end{equation}
+Measured Pauli-$Z$ expectation values $\langle Z_i \rangle \in [-1, 1]$ are scaled by a learnable temperature weight $\beta_{\text{atom}}$ (initialized at $3.0$), combined with covalent geometry compatibility modulation $\mathbf{x}_{\text{compat}}$ (measuring closeness to $\mathrm{C}=1.911$, $\mathrm{N}=1.866$, $\mathrm{O}/\mathrm{S}=1.824$, $\mathrm{P}=1.745$ affinities plus anti-$\mathrm{N}{-}\mathrm{N}$, anti-$\mathrm{O}{-}\mathrm{O}$, anti-$\mathrm{S}{-}\mathrm{S}$, and Carbon-tethered halogen rules) and CNS atom caps before Softmax sampling: step $0$ forced to Carbon, hard exclusion of $\mathrm{P}$ and $\mathrm{I}$, halogen mutual exclusivity, $\mathrm{S} \le 1$, heteroatom cap $\le \max(2, \lfloor 0.35\, N_{\text{target}} \rfloor)$, and $\mathrm{C}_{\text{frac}} \ge 0.65$ after step 3.
+
+\clearpage
+
+\begin{figure}[H]
 \centering
 % ---------------- PANEL (A): 9-QUBIT ATOM PREDICTION PQC ----------------
 \begin{subfigure}{\textwidth}
@@ -296,7 +306,7 @@ Phase 2 replaces dense matrix generation with an autoregressive Markov Decision 
 }
 \end{subfigure}
 
-\vspace{0.35cm}
+\vspace{0.15cm}
 
 % ---------------- PANEL (B): 4-QUBIT BOND PREDICTION PQC ----------------
 \begin{subfigure}{\textwidth}
@@ -395,13 +405,6 @@ Phase 2 replaces dense matrix generation with an autoregressive Markov Decision 
 \caption{Native schematic architecture of the dual data re-uploading Variational Quantum Policy circuits in MolGAN-VQP (\texttt{molgan\_vqp/policy\_qc.py}), inspired by Jerbi \textit{et al.}~[51]. \textbf{(A) 9-Qubit Atom Prediction Policy (\texttt{JerbiAtomPolicy}):} Phase 1 latent conditioning ($\mathbf{z} \in \mathbb{R}^{32}$) modulates the R-GCN state embedding ($\mathbf{h}_G'$) via FiLM and drives three repeating blocks of layer-specific $R_Y(\alpha_i^{(l)})$ data re-uploading, 9-qubit circular CNOT orbital coupling, and $SU(2)$ Bloch rotations $\mathrm{Rot}(\boldsymbol{\theta}_{l,i})$ over dedicated heavy-atom registers ($\mathrm{Q}_0$--$\mathrm{Q}_8$). Readout expectations are combined with covalent compatibility priors and deterministic CNS atom caps prior to sampling. \textbf{(B) 4-Qubit Bond Prediction Policy (\texttt{JerbiEdgePolicy}):} Concatenated node-pair features $[\mathbf{h}_u \,\|\, \mathbf{h}_v \,\|\, \mathbf{h}_G'] \in \mathbb{R}^{192}$ drive a 4-qubit re-uploading circuit mapped onto Kekul\'e bond orders ($\mathrm{Q}_0$: None, $\mathrm{Q}_1$: Single, $\mathrm{Q}_2$: Double, $\mathrm{Q}_3$: Triple), read out via $\langle Z_k\rangle$, and strictly gated by the 14-Rule Dynamic Valence and Anti-Strain Mask $\mathcal{M}_{\text{val}}(u,v)$.}
 \label{fig:quantum_circuits}
 \end{figure}
-
-\subsubsection*{9-Qubit Atom Prediction Policy (\texttt{JerbiAtomPolicy})}
-At step $t$, \texttt{JerbiAtomPolicy} ($19,062$ parameters) assigns one qubit exclusively to each heavy element ($\mathrm{Q}_0$--$\mathrm{Q}_8$). Across $L=3$ variational blocks, classical state features $\mathbf{h}_G' \in \mathbb{R}^{64}$ are re-uploaded at every layer $l \in \{0, 1, 2\}$ via dedicated $\text{MLP}_l$ subnetworks ($64 \to 64 \to 9$) outputting $\boldsymbol{\alpha}^{(l)} = \pi \tanh(\mathrm{MLP}_l(\mathbf{h}_G')) \in [-\pi, \pi]^9$:
-\begin{equation}
-|\psi_{\text{atom}}(\mathbf{h}_G'; \boldsymbol{\theta})\rangle = \prod_{l=0}^{L-1} \left[ \left(\bigotimes_{i=0}^{8} \mathrm{Rot}(\theta_{l,i,0}, \theta_{l,i,1}, \theta_{l,i,2})\right) \left(\prod_{i=0}^{8} \mathrm{CNOT}_{(i, (i+1)\bmod 9)}\right) \left(\bigotimes_{i=0}^{8} R_Y(\alpha_i^{(l)})\right) \right] |0\rangle^{\otimes 9}.
-\end{equation}
-Measured Pauli-$Z$ expectation values $\langle Z_i \rangle \in [-1, 1]$ are scaled by a learnable temperature weight $\beta_{\text{atom}}$ (initialized at $3.0$), combined with covalent geometry compatibility modulation $\mathbf{x}_{\text{compat}}$ (measuring closeness to $\mathrm{C}=1.911$, $\mathrm{N}=1.866$, $\mathrm{O}/\mathrm{S}=1.824$, $\mathrm{P}=1.745$ affinities plus anti-$\mathrm{N}{-}\mathrm{N}$, anti-$\mathrm{O}{-}\mathrm{O}$, anti-$\mathrm{S}{-}\mathrm{S}$, and Carbon-tethered halogen rules) and CNS atom caps before Softmax sampling: step $0$ forced to Carbon, hard exclusion of $\mathrm{P}$ and $\mathrm{I}$, halogen mutual exclusivity, $\mathrm{S} \le 1$, heteroatom cap $\le \max(2, \lfloor 0.35\, N_{\text{target}} \rfloor)$, and $\mathrm{C}_{\text{frac}} \ge 0.65$ after step 3.
 
 \subsubsection*{4-Qubit Bond Prediction Policy (\texttt{JerbiEdgePolicy})}
 For each candidate pair $(u, v)$ linking newly added atom $u$ to existing atom $v < u$, the edge policy takes concatenated pair representations $\mathbf{f}_{u,v} = [\mathbf{h}_u \,\|\, \mathbf{h}_v \,\|\, \mathbf{h}_G'] \in \mathbb{R}^{192}$. In \texttt{JerbiEdgePolicy} ($18,961$ parameters), $\mathbf{f}_{u,v}$ is re-uploaded over $L=3$ layers ($192 \to 32 \to 4$) across 4 dedicated bond wires ($\mathrm{Q}_0$: No Bond, $\mathrm{Q}_1$: Single, $\mathrm{Q}_2$: Double, $\mathrm{Q}_3$: Triple) with circular 4-qubit CNOT entanglement and $\mathrm{Rot}(\boldsymbol{\varphi}_{l,k})$ gates. Scaled readout logits $\beta_{\text{edge}}\langle Z_k\rangle$ are gated by the deterministic mask $\mathcal{M}_{\text{val}}(u,v) \in \{0, -\infty\}^4$. We also benchmarked a 2-qubit Born-rule circuit (\texttt{QuantumEdgePolicy2Q}, 6,261 params), a minimal classical circuit emulator (\texttt{ClassicalEdgeCircuit}, 1,580 params), and a fast MLP head ($25,220$ params).
