@@ -636,22 +636,27 @@ The full-scale training run (\texttt{Results/\allowbreak full\_scale\_50epochs/\
     \item \textbf{Multi-Objective Reward Trajectory (Fig.~\ref{fig:training_curves}D):} Composite reward remained strongly positive throughout training, peaking at \textbf{+0.7482} (Epoch 4, mean \textbf{+0.6289}) while balancing batch-mean $P(\text{BBB}^+)$ (mean $0.6187$, peak $0.8613$) and $P(\text{BACE-1})$ (mean $0.4487$, peak $0.6384$) under Murcko scaffold diversity pressure (bucket ceiling $25$).
 \end{enumerate}
 
-\begin{figure}[!htbp]
+\clearpage
+
+\begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{fig_training_curves.png}
+\includegraphics[width=0.75\textwidth]{fig_training_curves.png}
+\vspace{-0.15cm}
 \caption{Empirical 50-epoch training trajectories from \texttt{Results/\allowbreak full\_scale\_50epochs/\allowbreak 2026-11-11\_00-42-05/\allowbreak log\_dir/\allowbreak metrics.csv}: \textbf{(A)} Validity, uniqueness, novelty ($100.0\%$ invariant), and anti-strain stability ($97.88\%$ mean, $100.0\%$ Epoch 50 vs. $50.0\%$ pre-Rule-14 baseline); \textbf{(B)} Critic MSE loss ($0.2757 \to 0.0406$) and PPO clipped objective; \textbf{(C)} R-GCN discriminator equilibrium ($0.5983 \to 0.43$--$0.52$); and \textbf{(D)} Composite reward (peak $+0.748$) and target prediction curves.}
 \label{fig:training_curves}
 \end{figure}
 
+\vspace{-0.30cm}
 \subsection{Component-Wise Ablation Studies}
 To quantify the causal necessity of each safety and architectural layer in MolGAN-VQP, we evaluate controlled ablations on the trained 50-epoch checkpoint and compare against pre-upgrade baselines (Table~\ref{tab:ablations}):
-\begin{itemize}[noitemsep]
+\begin{itemize}[noitemsep,topsep=1pt,parsep=0pt]
     \item \textbf{Ablation 1 --- Removing Dynamic Valence Masking ($N=100$):} Disabling \texttt{compute\_valence\_mask} causes catastrophic chemical collapse: validity plunges immediately from $100.0\%$ to \textbf{0.0\%} ($0.0\%$ uniqueness, $0.0\%$ cleanliness) due to uncontrolled valence saturation and impossible bond multi-closures.
     \item \textbf{Ablation 2 --- Removing CNS Atom Caps ($N=100$, \texttt{ablation\_no\_atom\_filters.csv}):} Keeping dynamic valence rules active while removing element caps ($\mathrm{P}/\mathrm{I}$ hard ban, $\le 35\%$ heteroatoms, step-0 carbon start) maintains $100.0\%$ connectivity and $94.0\%$ uniqueness, yet \textbf{destroys cleanliness ($99.0\% \to \mathbf{0.0\%}$)}. The unconstrained policy generates isolated halogens ($\mathrm{I}$, $\mathrm{F}$), $\mathrm{P}/\mathrm{I}$ hyper-heteroatom rings such as \texttt{\seqsplit{FC(PC1SC(I)SC1F)C1SNC(C(P)I)P(S)S1}} ($\mathrm{MW}=655.24\text{ Da}, \mathrm{QED}=0.121$), halving QED ($0.412 \to 0.255$) and collapsing Tier-1 yield to \textbf{5.32\%}.
     \item \textbf{Ablation 3 --- Pre-Rule-14 Baseline (Without Bridged/Bredt/Cycle Strain Guards):} Earlier checkpoints trained prior to Rule-14 strict 5/6/7-ring and Bredt enforcement suffered high chemical strain, attaining only $50.0\%$ cleanliness in Epoch-1 training logs and $56.2\%$--$81.2\%$ in 16-molecule screens, versus $97.88\%$ mean / $100.0\%$ Epoch-50 cleanliness in the complete engine.
 \end{itemize}
 
-\begin{table}[!htbp]
+\vspace{-0.10cm}
+\begin{table}[H]
 \centering
 \caption{Component-wise ablation benchmark isolating dynamic valence masking, CNS atom caps, Rule-14 ring-strain guards, and dual-quantum bond selection.}
 \label{tab:ablations}
@@ -674,6 +679,8 @@ Pre-Rule-14 Baseline (Ep. 1 / 16-Eval) & 16 & 100.0 & 100.0 & 50.0--56.2 & 93.8*
 \par\vspace{0.1cm}
 \raggedright\footnotesize *Pre-Rule-14 16-molecule evaluation exhibited bridged/strained rings flagged as unstable (\texttt{Clean = 56.2\%}).
 \end{table}
+
+\clearpage
 
 
 
